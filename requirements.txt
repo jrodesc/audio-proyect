@@ -1,0 +1,4 @@
+yt-dlp>=2024.3.10
+python-mpv>=1.0.1
+PyQt6>=6.6.0
+requests>=2.31.0
