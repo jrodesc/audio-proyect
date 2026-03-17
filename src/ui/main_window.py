@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
             self.now_playing_label.setText(f"▶️ Reproduciendo: {title}")
             self.status_label.setText("✅ Reproducción iniciada")
             
-            self.play_pause_button.setText("⏸️ Pause")
+            self.play_pause_button.setText("⏸️Pausar ")
             self.play_pause_button.setEnabled(True)
             self.stop_button.setEnabled(True)
             
@@ -302,16 +302,16 @@ class MainWindow(QMainWindow):
         self.player_manager.toggle_pause()
         
         if self.player_manager.is_playing:
-            self.play_pause_button.setText("⏸️ Pause")
+            self.play_pause_button.setText("⏸️ Pausar")
         else:
-            self.play_pause_button.setText("▶️ Play")
+            self.play_pause_button.setText("▶️ Reproducir")
     
     def stop_playback(self):
         """Detiene la reproducción"""
         self.player_manager.stop()
         
         self.now_playing_label.setText("Nada reproduciéndose")
-        self.play_pause_button.setText("▶️ Play")
+        self.play_pause_button.setText("▶️ Reproducir")
         self.play_pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.progress_bar.setValue(0)
