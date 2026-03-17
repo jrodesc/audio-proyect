@@ -1,6 +1,24 @@
 """
 Módulo de reproducción de audio usando mpv
 """
+import os
+import sys
+
+# En Windows, agregar rutas comunes de mpv al PATH antes de importar
+if sys.platform == 'win32':
+    common_paths = [
+        r"C:\Program Files\mpv",
+        r"C:\Program Files (x86)\mpv",
+        os.path.expanduser(r"~\scoop\apps\mpv\current\bin"),  # Si se instala con scoop
+        os.path.expanduser(r"~\scoop\apps\mpv\bin"),  # Alternativa scoop
+        r"C:\Users\atorg\scoop\apps\mpv",  # Ruta específica
+        r"C:\Users\atorg\scoop\apps\mpv\bin",  # Con bin
+    ]
+    
+    for path in common_paths:
+        if os.path.exists(path):
+            os.environ["PATH"] = path + os.pathsep + os.environ["PATH"]
+
 try:
     import mpv
     MPV_AVAILABLE = True
@@ -10,7 +28,10 @@ except ImportError:
     MPV_ERROR = "mpv library not found. Install with: pip install python-mpv"
 except OSError as e:
     MPV_AVAILABLE = False
-    MPV_ERROR = f"mpv binary not available: {e}. Install mpv:\n  Fedora: sudo dnf install mpv\n  Ubuntu: sudo apt install mpv"
+    if sys.platform == 'win32':
+        MPV_ERROR = f"mpv binary not available: {e}\n\nSoluciones para Windows:\n1. Descargar mpv desde https://mpv.io/installation/\n2. Extraer en C:\\Program Files\\mpv\n3. O agregar la carpeta de mpv a tu PATH de sistema"
+    else:
+        MPV_ERROR = f"mpv binary not available: {e}. Install mpv:\n  Fedora: sudo dnf install mpv\n  Ubuntu: sudo apt install mpv"
 
 from typing import Optional, Callable
 
