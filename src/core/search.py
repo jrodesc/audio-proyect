@@ -93,6 +93,7 @@ class SearchManager:
         if not seconds:
             return "0:00"
         
+        seconds = int(seconds)  # Convertir a int por si es float
         mins = seconds // 60
         secs = seconds % 60
         return f"{mins}:{secs:02d}"
