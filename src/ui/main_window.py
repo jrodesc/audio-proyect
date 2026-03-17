@@ -12,7 +12,8 @@ from typing import List, Dict
 import requests
 from io import BytesIO
 
-from ..core import SearchManager, PlayerManager
+from core.search import SearchManager
+from core.player import PlayerManager
 
 
 class SearchThread(QThread):

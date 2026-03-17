@@ -1,7 +1,17 @@
 """
 Módulo de reproducción de audio usando mpv
 """
-import mpv
+try:
+    import mpv
+    MPV_AVAILABLE = True
+    MPV_ERROR = None
+except ImportError:
+    MPV_AVAILABLE = False
+    MPV_ERROR = "mpv library not found. Install with: pip install python-mpv"
+except OSError as e:
+    MPV_AVAILABLE = False
+    MPV_ERROR = f"mpv binary not available: {e}. Install mpv:\n  Fedora: sudo dnf install mpv\n  Ubuntu: sudo apt install mpv"
+
 from typing import Optional, Callable
 
 
@@ -18,6 +28,12 @@ class PlayerManager:
     
     def _init_player(self):
         """Inicializa el reproductor mpv"""
+        if not MPV_AVAILABLE:
+            print(f"⚠️  MPV no disponible: {MPV_ERROR}")
+            print("    La aplicación funcionará en modo sin audio")
+            self.player = None
+            return
+        
         try:
             self.player = mpv.MPV(
                 video=False,  # Solo audio
@@ -45,7 +61,10 @@ class PlayerManager:
             url: URL del stream de audio
         """
         if not self.player:
-            print("Reproductor no disponible")
+            if not MPV_AVAILABLE:
+                print(f"❌ No se puede reproducir: {MPV_ERROR}")
+            else:
+                print("❌ Reproductor no disponible")
             return
         
         try:
