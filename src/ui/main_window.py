@@ -135,11 +135,11 @@ class MainWindow(QMainWindow):
         # === CONTROLES DE REPRODUCCIÓN ===
         controls_layout = QHBoxLayout()
         
-        self.play_pause_button = QPushButton("▶️ Play")
+        self.play_pause_button = QPushButton("▶️ Reproducir")
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
         self.play_pause_button.setEnabled(False)
         
-        self.stop_button = QPushButton("⏹️ Stop")
+        self.stop_button = QPushButton("⏹️ Parar")
         self.stop_button.clicked.connect(self.stop_playback)
         self.stop_button.setEnabled(False)
         
