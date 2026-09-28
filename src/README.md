@@ -73,7 +73,7 @@ O directamente:
 3. **Controlar**: Usa los botones de Play/Pause/Stop
 4. **Ajustar volumen**: Usa el slider de volumen
 
-## 🏗️ Estructura del proyecto
+## 🏗️ Estructura del proyecto     
 
 ```
 youtube-audio-player/

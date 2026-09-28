@@ -7,6 +7,11 @@ import subprocess
 import shutil
 from typing import Optional, Callable
 
+# Configurar locale ANTES de importar mpv
+# Esto soluciona el error "non-C locale detected"
+os.environ['LC_ALL'] = 'C'
+os.environ['LANG'] = 'C'
+
 # Variable global para tracking de disponibilidad
 MPV_AVAILABLE = False
 MPV_ERROR = None
@@ -123,11 +128,17 @@ def verify_mpv_works(mpv_path):
     Verifica que mpv realmente funcione ejecutándolo
     """
     try:
+        # Configurar locale para el subproceso también
+        env = os.environ.copy()
+        env['LC_ALL'] = 'C'
+        env['LANG'] = 'C'
+        
         result = subprocess.run(
             [mpv_path, '--version'],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
+            env=env
         )
         return result.returncode == 0
     except Exception as e:
@@ -207,7 +218,7 @@ class PlayerManager:
         try:
             import mpv
             
-            # Configuración básica de mpv
+            # Configuración de mpv con locale fijo
             config = {
                 'video': False,  # Solo audio
                 'ytdl': True,    # Usar youtube-dl/yt-dlp integrado
@@ -217,15 +228,22 @@ class PlayerManager:
                 'msg_level': 'all=error',  # Solo mostrar errores
             }
             
-            # En Linux, especificar el audio driver explícitamente
+            # En Linux, configuración adicional
             if sys.platform == 'linux':
                 config['audio_device'] = 'auto'
             
+            # Crear player con configuración de locale
             self.player = mpv.MPV(**config)
             
             # Callback cuando termina la reproducción
             @self.player.event_callback('end-file')
             def on_end(event):
+                # mpv también emite end-file al parar o sustituir una pista.
+                # Solo EOF indica que terminó de reproducirse con normalidad.
+                event_data = getattr(event, 'data', None)
+                if event_data is None or event_data.reason != event_data.EOF:
+                    return
+
                 self.is_playing = False
                 if self.on_end_callback:
                     self.on_end_callback()
@@ -235,6 +253,15 @@ class PlayerManager:
         except Exception as e:
             print(f"❌ Error inicializando mpv: {e}")
             print(f"   Tipo de error: {type(e).__name__}")
+            
+            # Dar más detalles si es error de locale
+            if 'locale' in str(e).lower():
+                print("\n   💡 SOLUCIÓN para error de locale:")
+                print("   Este error ya debería estar solucionado.")
+                print("   Si persiste, ejecuta la app así:")
+                print("   Linux/Mac: LC_ALL=C python3 src/main.py")
+                print("   Windows: set LC_ALL=C && python src\\main.py")
+            
             self.player = None
     
     def play(self, url: str):
@@ -346,6 +373,7 @@ if __name__ == "__main__":
     print("=" * 70)
     print(f"\nSistema operativo: {sys.platform}")
     print(f"Python version: {sys.version}")
+    print(f"Locale configurado: LC_ALL={os.environ.get('LC_ALL', 'not set')}")
     
     print("\n1. Buscando binario de mpv...")
     found, path, error = find_mpv_binary()
@@ -358,11 +386,15 @@ if __name__ == "__main__":
             
             # Mostrar versión
             try:
+                env = os.environ.copy()
+                env['LC_ALL'] = 'C'
+                env['LANG'] = 'C'
                 result = subprocess.run(
                     [path, '--version'],
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=5,
+                    env=env
                 )
                 version_line = result.stdout.split('\n')[0]
                 print(f"   Versión: {version_line}")
