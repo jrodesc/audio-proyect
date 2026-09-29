@@ -1,43 +1,44 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# YouTube Audio Player - Fedora Launcher
+PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="$PROJECT_DIR/venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
 
 echo "🎵 YouTube Audio Player"
 echo "======================="
 
-# Check if Python is installed
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is not installed"
-    echo "Please install it: sudo dnf install python3"
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "Error: Python 3 no está instalado."
     exit 1
 fi
 
-# Check if venv exists, if not create it
-if [ ! -d "venv" ]; then
-    echo "📦 Creating virtual environment..."
-    python3 -m venv venv
+# Un entorno existente puede estar incompleto (por ejemplo, tener el lanzador
+# pip pero no el módulo pip). En ese caso se reconstruye antes de instalar.
+if [[ ! -x "$VENV_PYTHON" ]] || ! "$VENV_PYTHON" -m pip --version >/dev/null 2>&1; then
+    echo "📦 Creando/reparando el entorno virtual..."
+    if ! python3 -m venv --clear "$VENV_DIR"; then
+        echo "Error: no se pudo crear el entorno virtual."
+        echo "Fedora: instala python3 y python3-pip."
+        echo "Ubuntu/Mint: instala python3-venv y python3-pip."
+        exit 1
+    fi
 fi
 
-# Activate venv
-echo "🔧 Activating virtual environment..."
-source venv/bin/activate
-
-# Install/update dependencies
-echo "📥 Checking dependencies..."
-pip install -q -r requirements.txt
-
-# Check if mpv is installed
-if ! command -v mpv &> /dev/null; then
-    echo ""
-    echo "⚠️  WARNING: mpv is not installed"
-    echo "To use audio playback, install it with:"
-    echo "  sudo dnf install mpv"
-    echo ""
-    echo "The application will run in demo mode without audio."
-    echo ""
+echo "📥 Comprobando dependencias..."
+if ! "$VENV_PYTHON" -m pip install -q -r "$PROJECT_DIR/requirements.txt"; then
+    echo "Error: no se pudieron instalar las dependencias; la app no se iniciará."
+    exit 1
 fi
 
-# Run the application
-echo "🚀 Starting YouTube Audio Player..."
-cd src
-python3 main.py
+if ! command -v mpv >/dev/null 2>&1; then
+    echo "Aviso: mpv no está instalado; la reproducción de audio no estará disponible."
+    case "${ID:-}:${ID_LIKE:-}" in
+        *fedora*) echo "Instálalo con: sudo dnf install mpv" ;;
+        *debian*|*ubuntu*) echo "Instálalo con: sudo apt install mpv" ;;
+    esac
+fi
+
+echo "🚀 Iniciando la aplicación..."
+cd "$PROJECT_DIR/src"
+exec "$VENV_PYTHON" main.py
