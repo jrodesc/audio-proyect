@@ -328,6 +328,17 @@ class PlayerManager:
             self.pause()
         else:
             self.resume()
+
+    def restart(self) -> bool:
+        """Vuelve al inicio de la pista actual sin cambiar pausa/reproducción."""
+        if not self.player or not self.current_url:
+            return False
+        try:
+            self.player.seek(0, reference='absolute', precision='exact')
+            return True
+        except Exception as e:
+            print(f"Error volviendo al inicio: {e}")
+            return False
     
     def get_time_pos(self) -> float:
         """Retorna la posición actual en segundos"""

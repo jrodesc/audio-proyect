@@ -184,7 +184,11 @@ class MainWindow(QMainWindow):
         
         # === CONTROLES DE REPRODUCCIÓN ===
         controls_layout = QHBoxLayout()
-        
+
+        self.restart_button = QPushButton("Reiniciar")
+        self.restart_button.clicked.connect(self.restart_track)
+        self.restart_button.setEnabled(False)
+
         self.play_pause_button = QPushButton("Reproducir")
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
         self.play_pause_button.setEnabled(False)
@@ -202,6 +206,7 @@ class MainWindow(QMainWindow):
         self.volume_slider.valueChanged.connect(self.change_volume)
         self.volume_slider.setMaximumWidth(150)
         
+        controls_layout.addWidget(self.restart_button)
         controls_layout.addWidget(self.play_pause_button)
         controls_layout.addWidget(self.stop_button)
         controls_layout.addStretch()
@@ -638,6 +643,7 @@ class MainWindow(QMainWindow):
         self.now_playing_label.setText("Nada reproduciéndose")
         self.play_pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
+        self.restart_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.time_label.setText("0:00")
     
@@ -681,6 +687,7 @@ class MainWindow(QMainWindow):
             self.play_pause_button.setText("Pausar")
             self.play_pause_button.setEnabled(True)
             self.stop_button.setEnabled(True)
+            self.restart_button.setEnabled(True)
             
         except Exception as e:
             self.status_label.setText(f"Error al reproducir: {str(e)}")
@@ -695,6 +702,16 @@ class MainWindow(QMainWindow):
             self.play_pause_button.setText("Pausar")
         else:
             self.play_pause_button.setText("Reproducir")
+
+    def restart_track(self):
+        """Vuelve al inicio de la canción actual."""
+        if not self.restart_button.isEnabled():
+            return
+        if self.player_manager.restart():
+            self.progress_bar.setValue(0)
+            self.time_label.setText("0:00")
+        else:
+            self.status_label.setText("No se pudo reiniciar la canción")
     
     def stop_playback(self):
         """Detiene la reproducción"""
@@ -707,6 +724,7 @@ class MainWindow(QMainWindow):
         self.play_pause_button.setText("Reproducir")
         self.play_pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
+        self.restart_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.time_label.setText("0:00")
         self.status_label.setText("Reproducción detenida")
