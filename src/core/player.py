@@ -281,6 +281,9 @@ class PlayerManager:
         
         try:
             print(f"🎵 Intentando reproducir: {url[:80]}...")
+            # mpv conserva el estado de pausa al cambiar de archivo.
+            # Limpiarlo antes de cargar la nueva pista garantiza que arranque.
+            self.player.pause = False
             self.player.play(url)
             self.current_url = url
             self.is_playing = True
