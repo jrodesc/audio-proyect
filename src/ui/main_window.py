@@ -4,11 +4,10 @@ Ventana principal de la aplicación
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QLabel, QProgressBar, QSlider, QTabWidget, QInputDialog, QMessageBox,
-    QShortcut
+    QLabel, QProgressBar, QSlider, QTabWidget, QInputDialog, QMessageBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QEvent
-from PyQt6.QtGui import QPixmap, QIcon, QKeySequence
+from PyQt6.QtGui import QPixmap, QIcon, QKeySequence, QShortcut
 from typing import List, Dict, Optional
 import json
 import os
