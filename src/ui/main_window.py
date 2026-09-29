@@ -4,10 +4,11 @@ Ventana principal de la aplicación
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QLabel, QProgressBar, QSlider, QTabWidget, QInputDialog, QMessageBox
+    QLabel, QProgressBar, QSlider, QTabWidget, QInputDialog, QMessageBox,
+    QShortcut
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths
-from PyQt6.QtGui import QPixmap, QIcon
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QEvent
+from PyQt6.QtGui import QPixmap, QIcon, QKeySequence
 from typing import List, Dict, Optional
 import json
 import os
@@ -106,6 +107,11 @@ class MainWindow(QMainWindow):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Buscar música en YouTube...")
         self.search_input.returnPressed.connect(self.perform_search)
+
+        self.space_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
+        self.space_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self.space_shortcut.activated.connect(self.toggle_play_pause)
+        self.search_input.installEventFilter(self)
         
         self.search_button = QPushButton("Buscar")
         self.search_button.clicked.connect(self.perform_search)
@@ -290,6 +296,14 @@ class MainWindow(QMainWindow):
                 border: 1px solid #666666;
             }
         """)
+
+    def eventFilter(self, watched, event):
+        if watched is self.search_input:
+            if event.type() == QEvent.Type.FocusIn:
+                self.space_shortcut.setEnabled(False)
+            elif event.type() == QEvent.Type.FocusOut:
+                self.space_shortcut.setEnabled(True)
+        return super().eventFilter(watched, event)
     
     def perform_search(self):
         """Realiza una búsqueda en YouTube"""
@@ -673,6 +687,8 @@ class MainWindow(QMainWindow):
     
     def toggle_play_pause(self):
         """Alterna entre play y pause"""
+        if not self.play_pause_button.isEnabled():
+            return
         self.player_manager.toggle_pause()
         
         if self.player_manager.is_playing:
