@@ -184,6 +184,10 @@ class MainWindow(QMainWindow):
         # === CONTROLES DE REPRODUCCIÓN ===
         controls_layout = QHBoxLayout()
 
+        self.repeat_button = QPushButton("Repetir: No")
+        self.repeat_button.setCheckable(True)
+        self.repeat_button.toggled.connect(self.update_repeat_button)
+
         self.restart_button = QPushButton("Reiniciar")
         self.restart_button.clicked.connect(self.restart_track)
         self.restart_button.setEnabled(False)
@@ -205,6 +209,7 @@ class MainWindow(QMainWindow):
         self.volume_slider.valueChanged.connect(self.change_volume)
         self.volume_slider.setMaximumWidth(150)
         
+        controls_layout.addWidget(self.repeat_button)
         controls_layout.addWidget(self.restart_button)
         controls_layout.addWidget(self.play_pause_button)
         controls_layout.addWidget(self.stop_button)
@@ -610,12 +615,22 @@ class MainWindow(QMainWindow):
             self.finish_queue()
             return
         video = self.playback_queue[self.queue_position]
+        self.request_track_playback(video)
+
+    def request_track_playback(self, video: Dict):
         self.status_label.setText(f"Cargando audio de '{video.get('title', 'Sin título')}'...")
         self.extract_thread = ExtractAudioThread(self.search_manager, video)
         self.extract_thread.url_ready.connect(self.start_playback)
         self.extract_thread.start()
 
-    def play_next_in_queue(self):
+    def play_next_in_queue(self, allow_repeat: bool = True):
+        if allow_repeat and self.repeat_button.isChecked() and self.current_video:
+            if self.queue_enabled:
+                # Conserva el elemento actual de la cola y vuelve a cargarlo.
+                self.play_queue_position()
+            else:
+                self.request_track_playback(self.current_video)
+            return
         if not self.queue_enabled:
             return
         next_position = self.queue_position + 1
@@ -655,20 +670,16 @@ class MainWindow(QMainWindow):
 
         self.queue_enabled = False
         self.playback_queue = []
+        self.playback_playlist_name = None
         
-        self.status_label.setText(f"Cargando audio de '{video_info['title']}'...")
-        
-        # Extraer URL en thread separado
-        self.extract_thread = ExtractAudioThread(self.search_manager, video_info)
-        self.extract_thread.url_ready.connect(self.start_playback)
-        self.extract_thread.start()
+        self.request_track_playback(video_info)
     
     def start_playback(self, audio_url: str, video_info: Dict):
         """Inicia la reproducción"""
         if not audio_url:
             self.status_label.setText("No se pudo obtener el audio")
             if self.queue_enabled:
-                self.play_next_in_queue()
+                self.play_next_in_queue(allow_repeat=False)
             return
 
         self.current_video = video_info
@@ -711,6 +722,9 @@ class MainWindow(QMainWindow):
             self.time_label.setText("0:00")
         else:
             self.status_label.setText("No se pudo reiniciar la canción")
+
+    def update_repeat_button(self, enabled: bool):
+        self.repeat_button.setText("Repetir: Sí" if enabled else "Repetir: No")
     
     def stop_playback(self):
         """Detiene la reproducción"""
