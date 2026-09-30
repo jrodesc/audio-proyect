@@ -1,27 +1,33 @@
-# 🎵 YouTube Audio Player
+# YouTube Audio Player
 
-Reproductor de audio de YouTube con interfaz PyQt6. Busca temas y transmite audio con yt-dlp y mpv.
+A simple desktop audio player built with PyQt6. Search YouTube and stream audio using yt-dlp and mpv. The interface is available in English and Spanish; use the **EN/ES** button in the search bar to switch languages. Your selection is saved for the next launch.
 
-## Windows
+## Features
 
-La aplicación puede ejecutarse desde el código fuente en Windows 10/11.
+- Search YouTube for songs and artists
+- Stream audio without downloading files
+- Create and manage playlists, including the default **Favorites** playlist
+- Play playlists in order or randomly
+- Playback controls: play, pause, stop, restart, repeat, and volume
+- English and Spanish interface
 
-### Requisitos
+## Requirements
 
-- Python 3.10 o posterior, instalado desde [python.org](https://www.python.org/downloads/windows/). Durante la instalación, activa **Add python.exe to PATH**.
-- mpv y sus DLL de `libmpv` para reproducir audio. Puedes instalarlo con [Scoop](https://scoop.sh/) y `scoop install mpv`, o elegir una compilación desde la [página de instalación de mpv](https://mpv.io/installation/).
-- Conexión a internet para buscar y transmitir audio.
+- Python 3.10 or newer
+- mpv and its `libmpv` library (or DLLs on Windows)
+- Internet connection
 
-### Inicio rápido
+## Windows 10/11
 
-1. Clona o descarga el repositorio.
-2. Ejecuta `run.bat` desde la carpeta del proyecto (doble clic o desde una consola).
+1. Install Python from [python.org](https://www.python.org/downloads/windows/) and enable **Add python.exe to PATH** during setup.
+2. Install mpv and make sure its `libmpv` DLLs are available. You can use [Scoop](https://scoop.sh/) with `scoop install mpv`, or choose a build from the [mpv installation page](https://mpv.io/installation/).
+3. Run `run.bat` from the project folder (double-click it or launch it from Command Prompt).
 
-El lanzador crea o repara el entorno virtual `venv`, instala las dependencias de `requirements.txt` y abre la aplicación. Si no encuentra mpv, la interfaz puede abrirse, pero no habrá reproducción de audio. Si falla la instalación de dependencias, el lanzador se detiene y muestra un error.
+The launcher creates or repairs the `venv` virtual environment, installs the dependencies from `requirements.txt`, and starts the app. If mpv is missing, the app may open but audio playback will not work.
 
-### Instalación manual
+### Manual setup
 
-Desde la carpeta del proyecto, en `cmd.exe`:
+From the project folder in Command Prompt:
 
 ```bat
 python -m venv venv
@@ -32,124 +38,65 @@ cd src
 
 ## Fedora
 
-## Quick Setup (3 steps)
+Install the system dependencies and run the launcher:
 
-### Step 1: Install System Dependencies
 ```bash
 sudo dnf install python3 python3-pip mpv
-```
-
-### Step 2: Clone/Download Project
-```bash
-cd /path/to/youtube-audio-player
-```
-
-### Step 3: Run the Application
-```bash
 chmod +x run.sh
 ./run.sh
 ```
 
-El script crea o repara el entorno virtual e instala las dependencias de Python.
+The script creates or repairs the virtual environment and installs the Python dependencies.
 
----
+### Manual setup
 
-## Manual Setup (if you prefer)
-
-If you want to do it manually:
-
-### 1. Install system dependencies
 ```bash
 sudo dnf install python3 python3-pip mpv
-```
-
-### 2. Create virtual environment
-```bash
 python3 -m venv venv
 source venv/bin/activate
-```
-
-### 3. Install Python dependencies
-```bash
 pip install -r requirements.txt
-```
-
-### 4. Run the application
-```bash
 cd src
 python3 main.py
 ```
 
----
+## Ubuntu and Linux Mint
+
+Install the system dependencies, then run the Linux launcher:
+
+```bash
+sudo apt install python3 python3-venv python3-pip mpv
+chmod +x run.sh
+./run.sh
+```
 
 ## Troubleshooting
 
-### Error: "mpv: command not found"
-**Solution:**
-```bash
-sudo dnf install mpv
-```
+### `mpv` or audio playback is unavailable
 
-### Error: Permission denied on run.sh
-**Solution:**
+Confirm mpv is installed (`mpv --version`) and that its `libmpv` library is available to the application. On Fedora, install it with `sudo dnf install mpv`; on Ubuntu or Linux Mint, use `sudo apt install mpv`.
+
+### `No module named 'PyQt6'` or another dependency is missing
+
+Run the platform launcher again (`run.sh` on Linux or `run.bat` on Windows) to install the dependencies. For a manual installation, run `pip install -r requirements.txt` inside the project’s virtual environment.
+
+### Linux says `Permission denied` when running `run.sh`
+
 ```bash
 chmod +x run.sh
 ./run.sh
 ```
 
-### Error: "No module named 'PyQt6'"
-**Solution:**
-```bash
-pip install PyQt6
-```
+## System requirements
 
-### Audio not working
-1. Make sure mpv is installed: `mpv --version`
-2. Test mpv with: `mpv https://www.youtube.com/watch?v=VIDEO_ID`
-3. If that doesn't work, install: `sudo dnf install libmpv`
-
-### Application won't start
-Run with debug info:
-```bash
-cd src
-python3 main.py
-```
-
----
-
-## What This Application Does
-
-- 🔍 Search for videos on YouTube
-- 🎵 Stream audio directly without downloading
-- ▶️ Play/Pause/Stop controls
-- 🔊 Volume control
-- 📊 Progress bar with time display
-
----
-
-## How to Use
-
-1. Type a song or artist name in the search bar
-2. Double-click on a result to play
-3. Use Play/Pause/Stop buttons to control playback
-4. Adjust volume with the slider
-
----
-
-## System Requirements
-
-- **OS:** Windows 10/11, Fedora, Ubuntu o Linux Mint
-- **Python:** 3.10+
-- **RAM:** 512 MB minimum
-- **Internet:** Required for YouTube access
+- **Operating systems:** Windows 10/11, Fedora, Ubuntu, or Linux Mint
+- **Python:** 3.10 or newer
+- **Memory:** 512 MB minimum
 - **Audio playback:** mpv and its `libmpv` library/DLLs
-
----
+- **Internet:** Required to search and stream audio from YouTube
 
 ## Notes
 
-- The app uses yt-dlp to fetch video URLs from YouTube
-- All streaming is done through mpv, no files are downloaded
-- The app respects YouTube's terms of service (audio streaming only)
-- PyQt6 publica paquetes para Windows y yt-dlp requiere Python 3.10 o posterior; consulta sus requisitos actuales en [PyQt6](https://pypi.org/project/PyQt6/) y [yt-dlp](https://github.com/yt-dlp/yt-dlp#dependencies).
-- El lanzador de Windows está preparado, pero todavía debe probarse en una máquina Windows real.
+- yt-dlp fetches audio stream URLs from YouTube; mpv plays them.
+- The application streams audio and does not download media files.
+- PyQt6 provides Windows packages, and yt-dlp requires Python 3.10 or newer. See the [PyQt6 package page](https://pypi.org/project/PyQt6/) and [yt-dlp dependency documentation](https://github.com/yt-dlp/yt-dlp#dependencies).
+- The Windows launcher is provided, but has not yet been verified on a Windows machine.

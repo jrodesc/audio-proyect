@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QLabel, QProgressBar, QSlider, QTabWidget, QInputDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QEvent
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QEvent, QSettings
 from PyQt6.QtGui import QPixmap, QIcon, QKeySequence, QShortcut
 from typing import List, Dict, Optional
 import json
@@ -58,6 +58,11 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+
+        self.settings = QSettings("YT Audio", "YouTube Audio Player")
+        self.language = self.settings.value("language", "en")
+        if self.language not in ("en", "es"):
+            self.language = "en"
         
         # Managers
         self.search_manager = SearchManager()
@@ -114,9 +119,14 @@ class MainWindow(QMainWindow):
         
         self.search_button = QPushButton("Buscar")
         self.search_button.clicked.connect(self.perform_search)
+
+        self.language_button = QPushButton()
+        self.language_button.setFixedWidth(42)
+        self.language_button.clicked.connect(self.toggle_language)
         
         search_layout.addWidget(self.search_input)
         search_layout.addWidget(self.search_button)
+        search_layout.addWidget(self.language_button)
         
         main_layout.addLayout(search_layout)
         
@@ -201,7 +211,7 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         
         # Control de volumen
-        volume_label = QLabel("Volumen:")
+        self.volume_label = QLabel("Volumen:")
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setMinimum(0)
         self.volume_slider.setMaximum(100)
@@ -214,13 +224,106 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.play_pause_button)
         controls_layout.addWidget(self.stop_button)
         controls_layout.addStretch()
-        controls_layout.addWidget(volume_label)
+        controls_layout.addWidget(self.volume_label)
         controls_layout.addWidget(self.volume_slider)
         
         main_layout.addLayout(controls_layout)
         
         # Aplicar estilos
         self.apply_styles()
+        self.update_language()
+
+    def text(self, key: str, **values) -> str:
+        strings = {
+            "en": {
+                "search_placeholder": "Search YouTube for music...", "search": "Search",
+                "ready": "Ready to search", "results": "Results", "add_to_list": "Add to a playlist",
+                "new_playlist": "New playlist", "delete_playlist": "Delete playlist",
+                "play_order": "Play in order", "play_random": "Play randomly",
+                "nothing_playing": "Nothing is playing", "repeat_off": "Repeat: Off",
+                "default_list_name": "Favorites",
+                "repeat_on": "Repeat: On", "restart": "Restart", "play": "Play",
+                "pause": "Pause", "stop": "Stop", "volume": "Volume:",
+                "please_search": "Please enter something to search for",
+                "searching": "Searching '{query}'...", "not_found": "No results found",
+                "found": "Found {count} results", "untitled": "Untitled", "unknown": "Unknown",
+                "save_error": "Could not save playlists: {error}", "default_list": "Favorites is the default playlist",
+                "delete_this_list": "Delete this playlist", "remove_from": "Remove from {name}",
+                "add_to_list_tip": "Add to a playlist", "removed_from": "Removed from {name}",
+                "add_song": "Add song", "which_list": "Which playlist would you like to add this song to?",
+                "already_in": "This song is already in {name}", "added_to": "Added to {name}",
+                "create_title": "New playlist", "playlist_name": "Playlist name:",
+                "reserved": "That name is reserved", "duplicate": "A playlist with that name already exists",
+                "created": "Playlist '{name}' created", "delete_title": "Delete playlist",
+                "confirm_delete": "Delete playlist '{name}' and all its songs?",
+                "deleted": "Playlist '{name}' deleted", "empty": "Playlist '{name}' is empty",
+                "loading": "Loading audio for '{title}'...", "list_finished": "Playlist '{name}' finished",
+                "queue_finished": "Playlist finished", "audio_error": "Could not retrieve audio",
+                "started": "Playback started", "playing": "Playing: {title}",
+                "play_error": "Playback error: {error}", "restart_error": "Could not restart the track",
+                "stopped": "Playback stopped",
+            },
+            "es": {
+                "search_placeholder": "Buscar música en YouTube...", "search": "Buscar",
+                "ready": "Listo para buscar", "results": "Resultados", "add_to_list": "Añadir a una lista",
+                "new_playlist": "Nueva lista", "delete_playlist": "Eliminar lista",
+                "play_order": "Reproducir en orden", "play_random": "Reproducir aleatorio",
+                "nothing_playing": "Nada reproduciéndose", "repeat_off": "Repetir: No",
+                "default_list_name": "Favoritas",
+                "repeat_on": "Repetir: Sí", "restart": "Reiniciar", "play": "Reproducir",
+                "pause": "Pausar", "stop": "Detener", "volume": "Volumen:",
+                "please_search": "Por favor, escribe algo para buscar", "searching": "Buscando '{query}'...",
+                "not_found": "No se encontraron resultados", "found": "Se encontraron {count} resultados",
+                "untitled": "Sin título", "unknown": "Desconocido",
+                "save_error": "No se pudieron guardar las listas: {error}",
+                "default_list": "Favoritas es la lista predeterminada", "delete_this_list": "Eliminar esta lista",
+                "remove_from": "Eliminar de {name}", "add_to_list_tip": "Añadir a una lista",
+                "removed_from": "Eliminada de {name}", "add_song": "Añadir canción",
+                "which_list": "¿En qué lista deseas incluir esta canción?", "already_in": "La canción ya está en {name}",
+                "added_to": "Añadida a {name}", "create_title": "Nueva lista", "playlist_name": "Nombre de la lista:",
+                "reserved": "Ese nombre está reservado", "duplicate": "Ya existe una lista con ese nombre",
+                "created": "Lista '{name}' creada", "delete_title": "Eliminar lista",
+                "confirm_delete": "¿Eliminar la lista '{name}' y todas sus canciones?",
+                "deleted": "Lista '{name}' eliminada", "empty": "La lista '{name}' está vacía",
+                "loading": "Cargando audio de '{title}'...", "list_finished": "Lista '{name}' finalizada",
+                "queue_finished": "Lista finalizada", "audio_error": "No se pudo obtener el audio",
+                "started": "Reproducción iniciada", "playing": "Reproduciendo: {title}",
+                "play_error": "Error al reproducir: {error}", "restart_error": "No se pudo reiniciar la canción",
+                "stopped": "Reproducción detenida",
+            },
+        }
+        return strings[self.language][key].format(**values)
+
+    def toggle_language(self):
+        self.language = "es" if self.language == "en" else "en"
+        self.settings.setValue("language", self.language)
+        self.update_language()
+
+    def update_language(self):
+        """Refresh all visible controls after changing the interface language."""
+        self.setWindowTitle("YouTube Audio Player")
+        self.language_button.setText("EN" if self.language == "en" else "ES")
+        self.language_button.setToolTip("Switch language / Cambiar idioma")
+        self.search_input.setPlaceholderText(self.text("search_placeholder"))
+        self.search_button.setText(self.text("search"))
+        self.lists_tabs.setTabText(0, self.text("results"))
+        for name, widget in self.playlist_lists.items():
+            index = self.lists_tabs.indexOf(widget)
+            if index >= 0:
+                display_name = self.text("default_list_name") if name == "Favoritas" else name
+                self.lists_tabs.setTabText(index, f"{display_name} ({len(self.playlists[name])})")
+        self.create_playlist_button.setText(self.text("new_playlist"))
+        self.delete_playlist_button.setText(self.text("delete_playlist"))
+        self.play_order_button.setText(self.text("play_order"))
+        self.play_random_button.setText(self.text("play_random"))
+        self.now_playing_label.setText(self.text("nothing_playing") if not self.current_video else self.text("playing", title=self.current_video.get("title", self.text("untitled"))))
+        self.repeat_button.setText(self.text("repeat_on" if self.repeat_button.isChecked() else "repeat_off"))
+        self.restart_button.setText(self.text("restart"))
+        self.play_pause_button.setText(self.text("pause" if self.player_manager.is_playing else "play"))
+        self.stop_button.setText(self.text("stop"))
+        self.volume_label.setText(self.text("volume"))
+        self.update_list_action()
+        self.status_label.setText(self.text("started") if self.current_video else self.text("ready"))
     
     def apply_styles(self):
         """Aplica estilos CSS a la aplicación"""
@@ -319,10 +422,10 @@ class MainWindow(QMainWindow):
         query = self.search_input.text().strip()
         
         if not query:
-            self.status_label.setText("Por favor, escribe algo para buscar")
+            self.status_label.setText(self.text("please_search"))
             return
         
-        self.status_label.setText(f"Buscando '{query}'...")
+        self.status_label.setText(self.text("searching", query=query))
         self.search_button.setEnabled(False)
         self.results_list.clear()
         
@@ -337,14 +440,14 @@ class MainWindow(QMainWindow):
         self.search_button.setEnabled(True)
         
         if not results:
-            self.status_label.setText("No se encontraron resultados")
+            self.status_label.setText(self.text("not_found"))
             return
         
-        self.status_label.setText(f"Se encontraron {len(results)} resultados")
+        self.status_label.setText(self.text("found", count=len(results)))
         
         for video in results:
-            title = video.get('title', 'Sin título')
-            channel = video.get('channel', 'Desconocido')
+            title = video.get('title', self.text("untitled"))
+            channel = video.get('channel', self.text("unknown"))
             duration = self.search_manager.format_duration(video.get('duration', 0))
             
             item_text = f"{title}\n{channel}  |  {duration}"
@@ -393,7 +496,7 @@ class MainWindow(QMainWindow):
             with open(self.playlists_file_path(), "w", encoding="utf-8") as file:
                 json.dump(self.playlists, file, ensure_ascii=False, indent=2)
         except OSError as error:
-            self.status_label.setText(f"No se pudieron guardar las listas: {error}")
+            self.status_label.setText(self.text("save_error", error=error))
 
     def add_playlist_tab(self, playlist_name: str):
         playlist_list = QListWidget()
@@ -405,7 +508,8 @@ class MainWindow(QMainWindow):
         self.refresh_playlist_list(playlist_name)
 
     def playlist_tab_title(self, playlist_name: str) -> str:
-        return f"{playlist_name} ({len(self.playlists[playlist_name])})"
+        display_name = self.text("default_list_name") if playlist_name == "Favoritas" else playlist_name
+        return f"{display_name} ({len(self.playlists[playlist_name])})"
 
     def refresh_playlist_list(self, playlist_name: str):
         playlist_list = self.playlist_lists.get(playlist_name)
@@ -420,8 +524,8 @@ class MainWindow(QMainWindow):
             self.lists_tabs.setTabText(tab_index, self.playlist_tab_title(playlist_name))
 
     def make_video_item(self, video: Dict) -> QListWidgetItem:
-        title = video.get("title", "Sin título")
-        channel = video.get("channel", "Desconocido")
+        title = video.get("title", self.text("untitled"))
+        channel = video.get("channel", self.text("unknown"))
         duration = self.search_manager.format_duration(video.get("duration", 0))
         item = QListWidgetItem(f"{title}\n{channel}  |  {duration}")
         item.setData(Qt.ItemDataRole.UserRole, video)
@@ -444,9 +548,9 @@ class MainWindow(QMainWindow):
             is_playlist_tab and playlist_name != "Favoritas"
         )
         self.delete_playlist_button.setToolTip(
-            "Favoritas es la lista predeterminada"
+            self.text("default_list")
             if is_playlist_tab and playlist_name == "Favoritas"
-            else "Eliminar esta lista"
+            else self.text("delete_this_list")
         )
         self.play_order_button.setEnabled(is_playlist_tab)
         self.play_random_button.setEnabled(is_playlist_tab)
@@ -455,14 +559,14 @@ class MainWindow(QMainWindow):
             self.favorite_action_button.setText(action_symbol)
             self.favorite_action_button.setEnabled(False)
             self.favorite_action_button.setToolTip(
-                f"Eliminar de {playlist_name}" if is_playlist_tab else "Añadir a una lista"
+                self.text("remove_from", name=playlist_name) if is_playlist_tab else self.text("add_to_list_tip")
             )
             return
 
         self.favorite_action_button.setText("-" if is_playlist_tab else "+")
         self.favorite_action_button.setEnabled(True)
         self.favorite_action_button.setToolTip(
-            f"Eliminar de {playlist_name}" if is_playlist_tab else "Añadir a una lista"
+            self.text("remove_from", name=playlist_name) if is_playlist_tab else self.text("add_to_list_tip")
         )
 
     def handle_playlist_action(self):
@@ -485,15 +589,15 @@ class MainWindow(QMainWindow):
                 del playlist[existing_index]
                 self.save_playlists()
                 self.refresh_playlist_list(playlist_name)
-                self.status_label.setText(f"Eliminada de {playlist_name}")
+                self.status_label.setText(self.text("removed_from", name=playlist_name))
                 self.update_list_action()
             return
 
         playlist_names = list(self.playlists)
         playlist_name, accepted = QInputDialog.getItem(
             self,
-            "Añadir canción",
-            "¿En qué lista deseas incluir esta canción?",
+            self.text("add_song"),
+            self.text("which_list"),
             playlist_names,
             0,
             False,
@@ -503,37 +607,37 @@ class MainWindow(QMainWindow):
 
         playlist = self.playlists[playlist_name]
         if any(song.get("id") == video_id for song in playlist):
-            self.status_label.setText(f"La canción ya está en {playlist_name}")
+            self.status_label.setText(self.text("already_in", name=playlist_name))
             return
 
         # La canción recién añadida se coloca arriba y se reproducirá primero.
         playlist.insert(0, {
             "id": video_id,
-            "title": video.get("title", "Sin título"),
-            "channel": video.get("channel", "Desconocido"),
+            "title": video.get("title", self.text("untitled")),
+            "channel": video.get("channel", self.text("unknown")),
             "duration": video.get("duration", 0),
         })
         self.save_playlists()
         self.refresh_playlist_list(playlist_name)
-        self.status_label.setText(f"Añadida a {playlist_name}")
+        self.status_label.setText(self.text("added_to", name=playlist_name))
         self.update_list_action()
 
     def create_playlist(self):
-        name, accepted = QInputDialog.getText(self, "Nueva lista", "Nombre de la lista:")
+        name, accepted = QInputDialog.getText(self, self.text("create_title"), self.text("playlist_name"))
         name = name.strip()
         if not accepted or not name:
             return
-        if name.casefold() == "resultados":
-            self.status_label.setText("Ese nombre está reservado")
+        if name.casefold() in {"resultados", "results"}:
+            self.status_label.setText(self.text("reserved"))
             return
         if any(existing.casefold() == name.casefold() for existing in self.playlists):
-            self.status_label.setText("Ya existe una lista con ese nombre")
+            self.status_label.setText(self.text("duplicate"))
             return
         self.playlists[name] = []
         self.save_playlists()
         self.add_playlist_tab(name)
         self.lists_tabs.setCurrentWidget(self.playlist_lists[name])
-        self.status_label.setText(f"Lista '{name}' creada")
+        self.status_label.setText(self.text("created", name=name))
         self.update_list_action()
 
     def delete_current_playlist(self):
@@ -544,8 +648,8 @@ class MainWindow(QMainWindow):
         if self.playlists[playlist_name]:
             answer = QMessageBox.question(
                 self,
-                "Eliminar lista",
-                f"¿Eliminar la lista '{playlist_name}' y todas sus canciones?",
+                self.text("delete_title"),
+                self.text("confirm_delete", name=playlist_name),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -558,7 +662,7 @@ class MainWindow(QMainWindow):
         self.lists_tabs.removeTab(self.lists_tabs.indexOf(playlist_list))
         playlist_list.deleteLater()
         self.save_playlists()
-        self.status_label.setText(f"Lista '{playlist_name}' eliminada")
+        self.status_label.setText(self.text("deleted", name=playlist_name))
         self.update_list_action()
 
     def current_playlist_name(self):
@@ -578,7 +682,7 @@ class MainWindow(QMainWindow):
             return
         playlist = self.playlists[playlist_name]
         if not playlist:
-            self.status_label.setText(f"La lista '{playlist_name}' está vacía")
+            self.status_label.setText(self.text("empty", name=playlist_name))
             return
         self.playback_playlist_name = playlist_name
         self.playback_queue = list(playlist)
@@ -618,7 +722,7 @@ class MainWindow(QMainWindow):
         self.request_track_playback(video)
 
     def request_track_playback(self, video: Dict):
-        self.status_label.setText(f"Cargando audio de '{video.get('title', 'Sin título')}'...")
+        self.status_label.setText(self.text("loading", title=video.get('title', self.text("untitled"))))
         self.extract_thread = ExtractAudioThread(self.search_manager, video)
         self.extract_thread.url_ready.connect(self.start_playback)
         self.extract_thread.start()
@@ -651,10 +755,10 @@ class MainWindow(QMainWindow):
         self.playback_queue = []
         self.queue_position = -1
         self.status_label.setText(
-            f"Lista '{self.playback_playlist_name}' finalizada"
-            if self.playback_playlist_name else "Lista finalizada"
+            self.text("list_finished", name=self.playback_playlist_name)
+            if self.playback_playlist_name else self.text("queue_finished")
         )
-        self.now_playing_label.setText("Nada reproduciéndose")
+        self.now_playing_label.setText(self.text("nothing_playing"))
         self.play_pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.restart_button.setEnabled(False)
@@ -677,7 +781,7 @@ class MainWindow(QMainWindow):
     def start_playback(self, audio_url: str, video_info: Dict):
         """Inicia la reproducción"""
         if not audio_url:
-            self.status_label.setText("No se pudo obtener el audio")
+            self.status_label.setText(self.text("audio_error"))
             if self.queue_enabled:
                 self.play_next_in_queue(allow_repeat=False)
             return
@@ -690,17 +794,17 @@ class MainWindow(QMainWindow):
             self.time_label.setText("0:00")
             self.duration_label.setText(self.format_time(video_info.get("duration") or 0))
             
-            title = video_info.get('title', 'Sin título')
-            self.now_playing_label.setText(f"Reproduciendo: {title}")
-            self.status_label.setText("Reproducción iniciada")
+            title = video_info.get('title', self.text("untitled"))
+            self.now_playing_label.setText(self.text("playing", title=title))
+            self.status_label.setText(self.text("started"))
             
-            self.play_pause_button.setText("Pausar")
+            self.play_pause_button.setText(self.text("pause"))
             self.play_pause_button.setEnabled(True)
             self.stop_button.setEnabled(True)
             self.restart_button.setEnabled(True)
             
         except Exception as e:
-            self.status_label.setText(f"Error al reproducir: {str(e)}")
+            self.status_label.setText(self.text("play_error", error=str(e)))
     
     def toggle_play_pause(self):
         """Alterna entre play y pause"""
@@ -709,9 +813,9 @@ class MainWindow(QMainWindow):
         self.player_manager.toggle_pause()
         
         if self.player_manager.is_playing:
-            self.play_pause_button.setText("Pausar")
+            self.play_pause_button.setText(self.text("pause"))
         else:
-            self.play_pause_button.setText("Reproducir")
+            self.play_pause_button.setText(self.text("play"))
 
     def restart_track(self):
         """Vuelve al inicio de la canción actual."""
@@ -721,10 +825,10 @@ class MainWindow(QMainWindow):
             self.progress_bar.setValue(0)
             self.time_label.setText("0:00")
         else:
-            self.status_label.setText("No se pudo reiniciar la canción")
+            self.status_label.setText(self.text("restart_error"))
 
     def update_repeat_button(self, enabled: bool):
-        self.repeat_button.setText("Repetir: Sí" if enabled else "Repetir: No")
+        self.repeat_button.setText(self.text("repeat_on" if enabled else "repeat_off"))
     
     def stop_playback(self):
         """Detiene la reproducción"""
@@ -733,14 +837,14 @@ class MainWindow(QMainWindow):
         self.queue_position = -1
         self.player_manager.stop()
         
-        self.now_playing_label.setText("Nada reproduciéndose")
-        self.play_pause_button.setText("Reproducir")
+        self.now_playing_label.setText(self.text("nothing_playing"))
+        self.play_pause_button.setText(self.text("play"))
         self.play_pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.restart_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.time_label.setText("0:00")
-        self.status_label.setText("Reproducción detenida")
+        self.status_label.setText(self.text("stopped"))
     
     def change_volume(self, value: int):
         """Cambia el volumen del reproductor"""
