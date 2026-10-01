@@ -4,48 +4,49 @@ Ventana principal de la aplicación
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QLabel, QProgressBar, QSlider, QTabWidget, QInputDialog, QMessageBox
+    QLabel, QSlider, QTabWidget, QInputDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QEvent, QSettings
-from PyQt6.QtGui import QPixmap, QIcon, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QSettings
 from typing import List, Dict, Optional
-import json
 import os
 import random
-import requests
-from io import BytesIO
 
 from core.search import SearchManager
 from core.player import PlayerManager
+from core.playback_queue import PlaybackQueue
+from core.playlist_store import PlaylistStore
+from ui.i18n import STRINGS
 
 
 class SearchThread(QThread):
     """Thread para realizar búsquedas sin bloquear la UI"""
-    results_ready = pyqtSignal(list)
+    results_ready = pyqtSignal(int, list)
     
-    def __init__(self, search_manager: SearchManager, query: str):
+    def __init__(self, search_manager: SearchManager, query: str, generation: int):
         super().__init__()
         self.search_manager = search_manager
         self.query = query
+        self.generation = generation
     
     def run(self):
         results = self.search_manager.search(self.query)
-        self.results_ready.emit(results)
+        self.results_ready.emit(self.generation, results)
 
 
 class ExtractAudioThread(QThread):
     """Thread para extraer URL de audio sin bloquear la UI"""
-    url_ready = pyqtSignal(str, dict)
-    
-    def __init__(self, search_manager: SearchManager, video_info: Dict):
+    url_ready = pyqtSignal(int, str, dict)
+
+    def __init__(self, search_manager: SearchManager, video_info: Dict, generation: int = 0):
         super().__init__()
         self.search_manager = search_manager
         self.video_info = video_info
+        self.generation = generation
     
     def run(self):
         video_id = self.video_info.get('id', '')
         audio_url = self.search_manager.get_audio_url(video_id)
-        self.url_ready.emit(audio_url or "", self.video_info)
+        self.url_ready.emit(self.generation, audio_url or "", self.video_info)
 
 
 class PlaybackSignals(QObject):
@@ -79,6 +80,13 @@ class MainWindow(QMainWindow):
         self.playback_mode = "ordered"
         self.playback_playlist_name = None
         self.randomizer = random.SystemRandom()
+        self.play_queue = PlaybackQueue(self.randomizer)
+        self._threads = set()
+        self._search_generation = 0
+        self._play_generation = 0
+        self._preloaded_audio = {}
+        self._preload_inflight = set()
+        self._preload_started_for = None
         self.playback_signals = PlaybackSignals(self)
         self.playback_signals.track_ended.connect(self.play_next_in_queue)
         self.player_manager.on_end_callback = self.playback_signals.track_ended.emit
@@ -112,11 +120,6 @@ class MainWindow(QMainWindow):
         self.search_input.setPlaceholderText("Buscar música en YouTube...")
         self.search_input.returnPressed.connect(self.perform_search)
 
-        self.space_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
-        self.space_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
-        self.space_shortcut.activated.connect(self.toggle_play_pause)
-        self.search_input.installEventFilter(self)
-        
         self.search_button = QPushButton("Buscar")
         self.search_button.clicked.connect(self.perform_search)
 
@@ -181,8 +184,9 @@ class MainWindow(QMainWindow):
         progress_layout = QHBoxLayout()
         
         self.time_label = QLabel("0:00")
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(False)
+        self.progress_bar = QSlider(Qt.Orientation.Horizontal)
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.sliderReleased.connect(self._seek_to_slider)
         self.duration_label = QLabel("0:00")
         
         progress_layout.addWidget(self.time_label)
@@ -234,65 +238,7 @@ class MainWindow(QMainWindow):
         self.update_language()
 
     def text(self, key: str, **values) -> str:
-        strings = {
-            "en": {
-                "search_placeholder": "Search YouTube for music...", "search": "Search",
-                "ready": "Ready to search", "results": "Results", "add_to_list": "Add to a playlist",
-                "new_playlist": "New playlist", "delete_playlist": "Delete playlist",
-                "play_order": "Play in order", "play_random": "Play randomly",
-                "nothing_playing": "Nothing is playing", "repeat_off": "Repeat: Off",
-                "default_list_name": "Favorites",
-                "repeat_on": "Repeat: On", "restart": "Restart", "play": "Play",
-                "pause": "Pause", "stop": "Stop", "volume": "Volume:",
-                "please_search": "Please enter something to search for",
-                "searching": "Searching '{query}'...", "not_found": "No results found",
-                "found": "Found {count} results", "untitled": "Untitled", "unknown": "Unknown",
-                "save_error": "Could not save playlists: {error}", "default_list": "Favorites is the default playlist",
-                "delete_this_list": "Delete this playlist", "remove_from": "Remove from {name}",
-                "add_to_list_tip": "Add to a playlist", "removed_from": "Removed from {name}",
-                "add_song": "Add song", "which_list": "Which playlist would you like to add this song to?",
-                "already_in": "This song is already in {name}", "added_to": "Added to {name}",
-                "create_title": "New playlist", "playlist_name": "Playlist name:",
-                "reserved": "That name is reserved", "duplicate": "A playlist with that name already exists",
-                "created": "Playlist '{name}' created", "delete_title": "Delete playlist",
-                "confirm_delete": "Delete playlist '{name}' and all its songs?",
-                "deleted": "Playlist '{name}' deleted", "empty": "Playlist '{name}' is empty",
-                "loading": "Loading audio for '{title}'...", "list_finished": "Playlist '{name}' finished",
-                "queue_finished": "Playlist finished", "audio_error": "Could not retrieve audio",
-                "started": "Playback started", "playing": "Playing: {title}",
-                "play_error": "Playback error: {error}", "restart_error": "Could not restart the track",
-                "stopped": "Playback stopped",
-            },
-            "es": {
-                "search_placeholder": "Buscar música en YouTube...", "search": "Buscar",
-                "ready": "Listo para buscar", "results": "Resultados", "add_to_list": "Añadir a una lista",
-                "new_playlist": "Nueva lista", "delete_playlist": "Eliminar lista",
-                "play_order": "Reproducir en orden", "play_random": "Reproducir aleatorio",
-                "nothing_playing": "Nada reproduciéndose", "repeat_off": "Repetir: No",
-                "default_list_name": "Favoritas",
-                "repeat_on": "Repetir: Sí", "restart": "Reiniciar", "play": "Reproducir",
-                "pause": "Pausar", "stop": "Detener", "volume": "Volumen:",
-                "please_search": "Por favor, escribe algo para buscar", "searching": "Buscando '{query}'...",
-                "not_found": "No se encontraron resultados", "found": "Se encontraron {count} resultados",
-                "untitled": "Sin título", "unknown": "Desconocido",
-                "save_error": "No se pudieron guardar las listas: {error}",
-                "default_list": "Favoritas es la lista predeterminada", "delete_this_list": "Eliminar esta lista",
-                "remove_from": "Eliminar de {name}", "add_to_list_tip": "Añadir a una lista",
-                "removed_from": "Eliminada de {name}", "add_song": "Añadir canción",
-                "which_list": "¿En qué lista deseas incluir esta canción?", "already_in": "La canción ya está en {name}",
-                "added_to": "Añadida a {name}", "create_title": "Nueva lista", "playlist_name": "Nombre de la lista:",
-                "reserved": "Ese nombre está reservado", "duplicate": "Ya existe una lista con ese nombre",
-                "created": "Lista '{name}' creada", "delete_title": "Eliminar lista",
-                "confirm_delete": "¿Eliminar la lista '{name}' y todas sus canciones?",
-                "deleted": "Lista '{name}' eliminada", "empty": "La lista '{name}' está vacía",
-                "loading": "Cargando audio de '{title}'...", "list_finished": "Lista '{name}' finalizada",
-                "queue_finished": "Lista finalizada", "audio_error": "No se pudo obtener el audio",
-                "started": "Reproducción iniciada", "playing": "Reproduciendo: {title}",
-                "play_error": "Error al reproducir: {error}", "restart_error": "No se pudo reiniciar la canción",
-                "stopped": "Reproducción detenida",
-            },
-        }
-        return strings[self.language][key].format(**values)
+        return STRINGS[self.language][key].format(**values)
 
     def toggle_language(self):
         self.language = "es" if self.language == "en" else "en"
@@ -323,7 +269,6 @@ class MainWindow(QMainWindow):
         self.stop_button.setText(self.text("stop"))
         self.volume_label.setText(self.text("volume"))
         self.update_list_action()
-        self.status_label.setText(self.text("started") if self.current_video else self.text("ready"))
     
     def apply_styles(self):
         """Aplica estilos CSS a la aplicación"""
@@ -389,13 +334,6 @@ class MainWindow(QMainWindow):
                 margin-right: 2px;
             }
             QTabBar::tab:selected { background-color: #ffffff; }
-            QProgressBar {
-                background-color: #ffffff;
-                border: 1px solid #7f7f7f;
-                text-align: center;
-                min-height: 16px;
-            }
-            QProgressBar::chunk { background-color: #808080; }
             QSlider::groove:horizontal {
                 height: 4px;
                 background-color: #a0a0a0;
@@ -409,13 +347,14 @@ class MainWindow(QMainWindow):
             }
         """)
 
-    def eventFilter(self, watched, event):
-        if watched is self.search_input:
-            if event.type() == QEvent.Type.FocusIn:
-                self.space_shortcut.setEnabled(False)
-            elif event.type() == QEvent.Type.FocusOut:
-                self.space_shortcut.setEnabled(True)
-        return super().eventFilter(watched, event)
+    def keyPressEvent(self, event):
+        focused = self.focusWidget()
+        if (event.key() == Qt.Key.Key_Space and
+                not isinstance(focused, (QPushButton, QLineEdit))):
+            self.toggle_play_pause()
+            event.accept()
+            return
+        super().keyPressEvent(event)
     
     def perform_search(self):
         """Realiza una búsqueda en YouTube"""
@@ -424,15 +363,26 @@ class MainWindow(QMainWindow):
         if not query:
             self.status_label.setText(self.text("please_search"))
             return
+
+        if any(getattr(thread, "thread_kind", None) == "search" and thread.isRunning()
+               for thread in self._threads):
+            return
         
         self.status_label.setText(self.text("searching", query=query))
         self.search_button.setEnabled(False)
         self.results_list.clear()
         
         # Buscar en thread separado
-        self.search_thread = SearchThread(self.search_manager, query)
-        self.search_thread.results_ready.connect(self.display_results)
-        self.search_thread.start()
+        self._search_generation += 1
+        generation = self._search_generation
+        thread = SearchThread(self.search_manager, query, generation)
+        thread.thread_kind = "search"
+        thread.results_ready.connect(self._handle_search_results)
+        self._retain_thread(thread)
+
+    def _handle_search_results(self, generation: int, results: List[Dict]):
+        if generation == self._search_generation:
+            self.display_results(results)
     
     def display_results(self, results: List[Dict]):
         """Muestra los resultados de la búsqueda"""
@@ -469,23 +419,12 @@ class MainWindow(QMainWindow):
         return os.path.join(data_dir, "favoritas.json")
 
     def load_playlists(self) -> Dict[str, List[Dict]]:
+        self.playlist_store = PlaylistStore(self.playlists_file_path())
         try:
-            with open(self.playlists_file_path(), "r", encoding="utf-8") as file:
-                saved = json.load(file)
-            if isinstance(saved, list):
-                # Compatibilidad con la versión anterior, que guardaba solo Favoritas.
-                return {"Favoritas": self.valid_songs(saved)}
-            if isinstance(saved, dict):
-                playlists = {
-                    name: self.valid_songs(songs)
-                    for name, songs in saved.items()
-                    if isinstance(name, str) and name.strip() and isinstance(songs, list)
-                }
-                playlists.setdefault("Favoritas", [])
-                return playlists
-        except (OSError, ValueError, TypeError):
-            pass
-        return {"Favoritas": []}
+            return self.playlist_store.load()
+        except OSError as error:
+            print(f"No se pudieron respaldar las listas dañadas: {error}")
+            return {"Favoritas": []}
 
     @staticmethod
     def valid_songs(songs) -> List[Dict]:
@@ -493,10 +432,21 @@ class MainWindow(QMainWindow):
 
     def save_playlists(self):
         try:
-            with open(self.playlists_file_path(), "w", encoding="utf-8") as file:
-                json.dump(self.playlists, file, ensure_ascii=False, indent=2)
-        except OSError as error:
+            self.playlist_store.save(self.playlists)
+        except (OSError, TypeError, ValueError) as error:
             self.status_label.setText(self.text("save_error", error=error))
+
+    def _retain_thread(self, thread):
+        self._threads.add(thread)
+        thread.finished.connect(self._release_thread)
+        thread.start()
+
+    def _release_thread(self):
+        thread = self.sender()
+        if thread is None:
+            return
+        self._threads.discard(thread)
+        thread.deleteLater()
 
     def add_playlist_tab(self, playlist_name: str):
         playlist_list = QListWidget()
@@ -554,17 +504,8 @@ class MainWindow(QMainWindow):
         )
         self.play_order_button.setEnabled(is_playlist_tab)
         self.play_random_button.setEnabled(is_playlist_tab)
-        if not selected:
-            action_symbol = "-" if is_playlist_tab else "+"
-            self.favorite_action_button.setText(action_symbol)
-            self.favorite_action_button.setEnabled(False)
-            self.favorite_action_button.setToolTip(
-                self.text("remove_from", name=playlist_name) if is_playlist_tab else self.text("add_to_list_tip")
-            )
-            return
-
         self.favorite_action_button.setText("-" if is_playlist_tab else "+")
-        self.favorite_action_button.setEnabled(True)
+        self.favorite_action_button.setEnabled(bool(selected))
         self.favorite_action_button.setToolTip(
             self.text("remove_from", name=playlist_name) if is_playlist_tab else self.text("add_to_list_tip")
         )
@@ -610,8 +551,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(self.text("already_in", name=playlist_name))
             return
 
-        # La canción recién añadida se coloca arriba y se reproducirá primero.
-        playlist.insert(0, {
+        playlist.append({
             "id": video_id,
             "title": video.get("title", self.text("untitled")),
             "channel": video.get("channel", self.text("unknown")),
@@ -627,7 +567,7 @@ class MainWindow(QMainWindow):
         name = name.strip()
         if not accepted or not name:
             return
-        if name.casefold() in {"resultados", "results"}:
+        if name.casefold() in {"resultados", "results", "favoritas", "favorites"}:
             self.status_label.setText(self.text("reserved"))
             return
         if any(existing.casefold() == name.casefold() for existing in self.playlists):
@@ -685,15 +625,9 @@ class MainWindow(QMainWindow):
             self.status_label.setText(self.text("empty", name=playlist_name))
             return
         self.playback_playlist_name = playlist_name
-        self.playback_queue = list(playlist)
-        self.playback_mode = "random" if shuffle else "ordered"
-        if shuffle and len(self.playback_queue) > 1:
-            first_index = self.randomizer.randrange(len(self.playback_queue))
-            self.playback_queue[0], self.playback_queue[first_index] = (
-                self.playback_queue[first_index], self.playback_queue[0]
-            )
+        self.play_queue.load(playlist, shuffle=shuffle)
+        self._sync_queue_state()
         self.queue_enabled = True
-        self.queue_position = 0
         self.play_queue_position()
 
     def play_playlist_item(self, item: QListWidgetItem):
@@ -708,24 +642,36 @@ class MainWindow(QMainWindow):
             0,
         )
         self.playback_playlist_name = playlist_name
-        self.playback_queue = list(self.playlists[playlist_name])
-        self.playback_mode = "ordered"
+        self.play_queue.load(self.playlists[playlist_name], start=index)
+        self._sync_queue_state()
         self.queue_enabled = True
-        self.queue_position = index
         self.play_queue_position()
 
     def play_queue_position(self):
-        if not self.queue_enabled or not (0 <= self.queue_position < len(self.playback_queue)):
+        self._sync_queue_state()
+        if not self.queue_enabled or self.play_queue.current is None:
             self.finish_queue()
             return
-        video = self.playback_queue[self.queue_position]
-        self.request_track_playback(video)
+        self.request_track_playback(self.play_queue.current)
+
+    def _sync_queue_state(self):
+        self.playback_queue = self.play_queue.items
+        self.queue_position = self.play_queue.position
+        self.playback_mode = self.play_queue.mode
 
     def request_track_playback(self, video: Dict):
+        self._play_generation += 1
+        generation = self._play_generation
         self.status_label.setText(self.text("loading", title=video.get('title', self.text("untitled"))))
-        self.extract_thread = ExtractAudioThread(self.search_manager, video)
-        self.extract_thread.url_ready.connect(self.start_playback)
-        self.extract_thread.start()
+        self.stop_button.setEnabled(True)
+        cached = self._preloaded_audio.pop(video.get("id"), None)
+        if cached:
+            self.start_playback(cached, video)
+            return
+        thread = ExtractAudioThread(self.search_manager, video, generation)
+        thread.thread_kind = "extract"
+        thread.url_ready.connect(self._handle_extract_result)
+        self._retain_thread(thread)
 
     def play_next_in_queue(self, allow_repeat: bool = True):
         if allow_repeat and self.repeat_button.isChecked() and self.current_video:
@@ -737,23 +683,19 @@ class MainWindow(QMainWindow):
             return
         if not self.queue_enabled:
             return
-        next_position = self.queue_position + 1
-        if self.playback_mode == "random" and next_position < len(self.playback_queue):
-            remaining = len(self.playback_queue) - next_position
-            random_index = next_position + self.randomizer.randrange(remaining)
-            self.playback_queue[next_position], self.playback_queue[random_index] = (
-                self.playback_queue[random_index], self.playback_queue[next_position]
-            )
-        self.queue_position = next_position
-        if self.queue_position >= len(self.playback_queue):
+        following = self.play_queue.advance()
+        self._sync_queue_state()
+        if following is None:
             self.finish_queue()
         else:
             self.play_queue_position()
 
     def finish_queue(self):
         self.queue_enabled = False
-        self.playback_queue = []
-        self.queue_position = -1
+        self._play_generation += 1
+        self.play_queue.clear()
+        self._sync_queue_state()
+        self.current_video = None
         self.status_label.setText(
             self.text("list_finished", name=self.playback_playlist_name)
             if self.playback_playlist_name else self.text("queue_finished")
@@ -773,6 +715,9 @@ class MainWindow(QMainWindow):
             return
 
         self.queue_enabled = False
+        self._play_generation += 1
+        self.play_queue.clear()
+        self._sync_queue_state()
         self.playback_queue = []
         self.playback_playlist_name = None
         
@@ -787,12 +732,15 @@ class MainWindow(QMainWindow):
             return
 
         self.current_video = video_info
+        self._preload_started_for = None
         
         try:
             self.player_manager.play(audio_url)
+            duration = int(video_info.get("duration") or 0)
+            self.progress_bar.setRange(0, max(0, duration))
             self.progress_bar.setValue(0)
             self.time_label.setText("0:00")
-            self.duration_label.setText(self.format_time(video_info.get("duration") or 0))
+            self.duration_label.setText(self.format_time(duration))
             
             title = video_info.get('title', self.text("untitled"))
             self.now_playing_label.setText(self.text("playing", title=title))
@@ -835,6 +783,10 @@ class MainWindow(QMainWindow):
         self.queue_enabled = False
         self.playback_queue = []
         self.queue_position = -1
+        self._play_generation += 1
+        self.play_queue.clear()
+        self._sync_queue_state()
+        self.current_video = None
         self.player_manager.stop()
         
         self.now_playing_label.setText(self.text("nothing_playing"))
@@ -859,8 +811,9 @@ class MainWindow(QMainWindow):
         duration = self.player_manager.get_duration()
         
         if duration > 0:
-            progress = int((current_time / duration) * 100)
-            self.progress_bar.setValue(progress)
+            if not self.progress_bar.isSliderDown():
+                self.progress_bar.setRange(0, int(duration))
+                self.progress_bar.setValue(int(current_time))
             
             # Formatear tiempo
             current_str = self.format_time(current_time)
@@ -868,7 +821,42 @@ class MainWindow(QMainWindow):
             
             self.time_label.setText(current_str)
             self.duration_label.setText(duration_str)
+            threshold = min(20, max(5, duration * 0.45))
+            if current_time >= threshold:
+                self._preload_next_track()
+
+    def _preload_next_track(self):
+        if (not self.queue_enabled or not self.current_video or
+                self._preload_started_for == self.current_video.get("id")):
+            return
+        next_index = self.play_queue.position + 1
+        if next_index >= len(self.play_queue.items):
+            return
+        video = self.play_queue.items[next_index]
+        video_id = video.get("id")
+        if not video_id or video_id in self._preloaded_audio or video_id in self._preload_inflight:
+            return
+        self._preload_started_for = self.current_video.get("id")
+        self._preload_inflight.add(video_id)
+        thread = ExtractAudioThread(self.search_manager, video)
+        thread.thread_kind = "preload"
+        thread.url_ready.connect(self._handle_extract_result)
+        self._retain_thread(thread)
+
+    def _handle_extract_result(self, generation: int, audio_url: str, video_info: Dict):
+        video_id = video_info.get("id")
+        if generation == 0:
+            self._preload_inflight.discard(video_id)
+            if audio_url:
+                self._preloaded_audio[video_id] = audio_url
+        elif generation == self._play_generation:
+            self.start_playback(audio_url, video_info)
     
+    def _seek_to_slider(self):
+        target = self.progress_bar.value()
+        if self.player_manager.seek(target):
+            self.time_label.setText(self.format_time(target))
+
     def format_time(self, seconds: float) -> str:
         """Formatea segundos a MM:SS"""
         mins = int(seconds // 60)
@@ -877,5 +865,7 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """Maneja el cierre de la aplicación"""
+        for thread in list(self._threads):
+            thread.wait()
         self.player_manager.cleanup()
         event.accept()

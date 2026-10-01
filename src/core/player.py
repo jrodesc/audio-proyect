@@ -339,6 +339,17 @@ class PlayerManager:
         except Exception as e:
             print(f"Error volviendo al inicio: {e}")
             return False
+
+    def seek(self, seconds: float) -> bool:
+        """Seek to an absolute time in the current track."""
+        if not self.player or not self.current_url:
+            return False
+        try:
+            self.player.seek(max(0, float(seconds)), reference='absolute', precision='exact')
+            return True
+        except Exception as e:
+            print(f"Error buscando en la pista: {e}")
+            return False
     
     def get_time_pos(self) -> float:
         """Retorna la posición actual en segundos"""
