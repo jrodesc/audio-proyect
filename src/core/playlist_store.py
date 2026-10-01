@@ -11,7 +11,16 @@ class PlaylistStore:
 
     @staticmethod
     def valid_songs(songs):
-        return [song for song in songs if isinstance(song, dict) and song.get("id")]
+        valid = []
+        for song in songs:
+            if not isinstance(song, dict) or not song.get("id"):
+                continue
+            try:
+                hash(song["id"])
+            except TypeError:
+                continue
+            valid.append(song)
+        return valid
 
     def load(self):
         try:
@@ -22,11 +31,15 @@ class PlaylistStore:
             if isinstance(saved, dict):
                 playlists = {name: self.valid_songs(songs) for name, songs in saved.items()
                              if isinstance(name, str) and name.strip() and isinstance(songs, list)}
-                if "Favorites" in playlists:
-                    favorites = playlists.pop("Favorites")
+                legacy_names = [name for name in playlists if name.casefold() == "favorites"]
+                if legacy_names:
                     default = playlists.setdefault(self.DEFAULT_NAME, [])
                     known_ids = {song["id"] for song in default}
-                    default.extend(song for song in favorites if song["id"] not in known_ids)
+                    for name in legacy_names:
+                        for song in playlists.pop(name):
+                            if song["id"] not in known_ids:
+                                default.append(song)
+                                known_ids.add(song["id"])
                 playlists.setdefault(self.DEFAULT_NAME, [])
                 return playlists
             raise ValueError("El formato de las listas no es válido")
@@ -34,9 +47,12 @@ class PlaylistStore:
             return {self.DEFAULT_NAME: []}
         except (OSError, ValueError, TypeError) as error:
             if os.path.exists(self.path):
-                backup = self.path + ".bak"
-                if os.path.exists(backup):
-                    backup += ".1"
+                backup_base = self.path + ".bak"
+                backup = backup_base
+                suffix = 1
+                while os.path.exists(backup):
+                    backup = f"{backup_base}.{suffix}"
+                    suffix += 1
                 try:
                     os.replace(self.path, backup)
                 except OSError:

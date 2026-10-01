@@ -11,6 +11,8 @@ class PlaybackQueue:
 
     def load(self, items, shuffle=False, start=0):
         self.items = list(items)
+        if self.items and not 0 <= start < len(self.items):
+            raise ValueError("start must identify an item in the queue")
         self.position = start if self.items else -1
         self.mode = "random" if shuffle else "ordered"
         if shuffle and len(self.items) > 1:
@@ -23,12 +25,21 @@ class PlaybackQueue:
         return self.items[self.position] if 0 <= self.position < len(self.items) else None
 
     def advance(self):
+        if not self.items:
+            return None
         next_position = self.position + 1
+        if next_position >= len(self.items):
+            self.position = len(self.items)
+            return None
         if self.mode == "random" and next_position < len(self.items):
             other = next_position + self.randomizer.randrange(len(self.items) - next_position)
             self.items[next_position], self.items[other] = self.items[other], self.items[next_position]
         self.position = next_position
         return self.current
+
+    def skip(self):
+        """Move to the next item, regardless of repeat settings in the caller."""
+        return self.advance()
 
     def clear(self):
         self.items = []

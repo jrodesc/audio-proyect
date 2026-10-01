@@ -199,6 +199,7 @@ class PlayerManager:
     def __init__(self):
         self.player: Optional['mpv.MPV'] = None
         self.current_url: Optional[str] = None
+        self.current_track_token = -1
         self.is_playing = False
         self.on_end_callback: Optional[Callable] = None
         
@@ -246,7 +247,7 @@ class PlayerManager:
 
                 self.is_playing = False
                 if self.on_end_callback:
-                    self.on_end_callback()
+                    self.on_end_callback(self.current_track_token)
             
             print("✅ Reproductor mpv inicializado correctamente")
             
@@ -264,7 +265,7 @@ class PlayerManager:
             
             self.player = None
     
-    def play(self, url: str):
+    def play(self, url: str, track_token: int = -1):
         """
         Reproduce una URL de audio
         
@@ -284,6 +285,7 @@ class PlayerManager:
             # mpv conserva el estado de pausa al cambiar de archivo.
             # Limpiarlo antes de cargar la nueva pista garantiza que arranque.
             self.player.pause = False
+            self.current_track_token = track_token
             self.player.play(url)
             self.current_url = url
             self.is_playing = True
@@ -319,6 +321,7 @@ class PlayerManager:
                 self.player.stop()
                 self.is_playing = False
                 self.current_url = None
+                self.current_track_token = -1
             except Exception as e:
                 print(f"Error deteniendo: {e}")
     

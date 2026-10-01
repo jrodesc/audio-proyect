@@ -51,7 +51,7 @@ class ExtractAudioThread(QThread):
 
 class PlaybackSignals(QObject):
     """Puente seguro entre los eventos de mpv y el hilo de la interfaz."""
-    track_ended = pyqtSignal()
+    track_ended = pyqtSignal(int)
 
 
 class MainWindow(QMainWindow):
@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
         self._preload_inflight = set()
         self._preload_started_for = None
         self.playback_signals = PlaybackSignals(self)
-        self.playback_signals.track_ended.connect(self.play_next_in_queue)
+        self.playback_signals.track_ended.connect(self._handle_track_ended)
         self.player_manager.on_end_callback = self.playback_signals.track_ended.emit
         
         # Setup UI
@@ -213,6 +213,10 @@ class MainWindow(QMainWindow):
         self.stop_button = QPushButton("Detener")
         self.stop_button.clicked.connect(self.stop_playback)
         self.stop_button.setEnabled(False)
+
+        self.skip_button = QPushButton()
+        self.skip_button.clicked.connect(self.skip_track)
+        self.skip_button.setEnabled(False)
         
         # Control de volumen
         self.volume_label = QLabel("Volumen:")
@@ -226,6 +230,7 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.repeat_button)
         controls_layout.addWidget(self.restart_button)
         controls_layout.addWidget(self.play_pause_button)
+        controls_layout.addWidget(self.skip_button)
         controls_layout.addWidget(self.stop_button)
         controls_layout.addStretch()
         controls_layout.addWidget(self.volume_label)
@@ -267,6 +272,7 @@ class MainWindow(QMainWindow):
         self.restart_button.setText(self.text("restart"))
         self.play_pause_button.setText(self.text("pause" if self.player_manager.is_playing else "play"))
         self.stop_button.setText(self.text("stop"))
+        self.skip_button.setText(self.text("skip"))
         self.volume_label.setText(self.text("volume"))
         self.update_list_action()
     
@@ -628,6 +634,7 @@ class MainWindow(QMainWindow):
         self.play_queue.load(playlist, shuffle=shuffle)
         self._sync_queue_state()
         self.queue_enabled = True
+        self.skip_button.setEnabled(True)
         self.play_queue_position()
 
     def play_playlist_item(self, item: QListWidgetItem):
@@ -645,6 +652,7 @@ class MainWindow(QMainWindow):
         self.play_queue.load(self.playlists[playlist_name], start=index)
         self._sync_queue_state()
         self.queue_enabled = True
+        self.skip_button.setEnabled(True)
         self.play_queue_position()
 
     def play_queue_position(self):
@@ -690,6 +698,27 @@ class MainWindow(QMainWindow):
         else:
             self.play_queue_position()
 
+    def _handle_track_ended(self, track_token: int):
+        if track_token == self._play_generation:
+            self.play_next_in_queue()
+
+    def skip_track(self):
+        """Skip the current playlist entry and invalidate any pending extraction."""
+        if not self.queue_enabled:
+            return
+        self._play_generation += 1
+        self.player_manager.stop()
+        self.current_video = None
+        self.now_playing_label.setText(self.text("nothing_playing"))
+        self.play_pause_button.setEnabled(False)
+        self.restart_button.setEnabled(False)
+        following = self.play_queue.skip()
+        self._sync_queue_state()
+        if following is None:
+            self.finish_queue()
+        else:
+            self.play_queue_position()
+
     def finish_queue(self):
         self.queue_enabled = False
         self._play_generation += 1
@@ -702,6 +731,7 @@ class MainWindow(QMainWindow):
         )
         self.now_playing_label.setText(self.text("nothing_playing"))
         self.play_pause_button.setEnabled(False)
+        self.skip_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.restart_button.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -715,6 +745,7 @@ class MainWindow(QMainWindow):
             return
 
         self.queue_enabled = False
+        self.skip_button.setEnabled(False)
         self._play_generation += 1
         self.play_queue.clear()
         self._sync_queue_state()
@@ -735,7 +766,7 @@ class MainWindow(QMainWindow):
         self._preload_started_for = None
         
         try:
-            self.player_manager.play(audio_url)
+            self.player_manager.play(audio_url, track_token=self._play_generation)
             duration = int(video_info.get("duration") or 0)
             self.progress_bar.setRange(0, max(0, duration))
             self.progress_bar.setValue(0)
@@ -781,6 +812,7 @@ class MainWindow(QMainWindow):
     def stop_playback(self):
         """Detiene la reproducción"""
         self.queue_enabled = False
+        self.skip_button.setEnabled(False)
         self.playback_queue = []
         self.queue_position = -1
         self._play_generation += 1
@@ -793,6 +825,7 @@ class MainWindow(QMainWindow):
         self.play_pause_button.setText(self.text("play"))
         self.play_pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
+        self.skip_button.setEnabled(False)
         self.restart_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.time_label.setText("0:00")
