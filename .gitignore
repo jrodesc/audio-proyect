@@ -42,3 +42,7 @@ Thumbs.db
 
 # Cache
 .cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
