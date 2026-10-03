@@ -16,6 +16,7 @@ from core.player import PlayerManager
 from core.playback_queue import PlaybackQueue
 from core.playlist_store import PlaylistStore
 from ui.i18n import STRINGS
+from utils.theme import ThemePreference, stylesheet_for_mode
 
 
 class SearchThread(QThread):
@@ -61,6 +62,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.settings = QSettings("YT Audio", "YouTube Audio Player")
+        self.theme_preference = ThemePreference(self.settings)
         self.language = self.settings.value("language", "en")
         if self.language not in ("en", "es"):
             self.language = "en"
@@ -126,16 +128,21 @@ class MainWindow(QMainWindow):
         self.language_button = QPushButton()
         self.language_button.setFixedWidth(42)
         self.language_button.clicked.connect(self.toggle_language)
+
+        self.dark_mode_button = QPushButton()
+        self.dark_mode_button.setCheckable(True)
+        self.dark_mode_button.setChecked(self.theme_preference.enabled)
+        self.dark_mode_button.toggled.connect(self.toggle_dark_mode)
         
         search_layout.addWidget(self.search_input)
         search_layout.addWidget(self.search_button)
         search_layout.addWidget(self.language_button)
+        search_layout.addWidget(self.dark_mode_button)
         
         main_layout.addLayout(search_layout)
         
         # === ESTADO DE BÚSQUEDA ===
         self.status_label = QLabel("Listo para buscar")
-        self.status_label.setStyleSheet("color: #333;")
         main_layout.addWidget(self.status_label)
         
         # === RESULTADOS Y LISTA DE REPRODUCCIÓN ===
@@ -255,6 +262,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("YouTube Audio Player")
         self.language_button.setText("EN" if self.language == "en" else "ES")
         self.language_button.setToolTip("Switch language / Cambiar idioma")
+        self.dark_mode_button.setText(
+            self.text("dark_mode_on" if self.theme_preference.enabled else "dark_mode_off")
+        )
         self.search_input.setPlaceholderText(self.text("search_placeholder"))
         self.search_button.setText(self.text("search"))
         self.lists_tabs.setTabText(0, self.text("results"))
@@ -278,7 +288,7 @@ class MainWindow(QMainWindow):
     
     def apply_styles(self):
         """Aplica estilos CSS a la aplicación"""
-        self.setStyleSheet("""
+        light_stylesheet = """
             QWidget {
                 background-color: #d4d0c8;
                 color: #000000;
@@ -351,7 +361,15 @@ class MainWindow(QMainWindow):
                 background-color: #e1e1e1;
                 border: 1px solid #666666;
             }
-        """)
+        """
+        self.setStyleSheet(stylesheet_for_mode(light_stylesheet, self.theme_preference.enabled))
+
+    def toggle_dark_mode(self, enabled: bool):
+        self.theme_preference.set_enabled(enabled)
+        self.dark_mode_button.setText(
+            self.text("dark_mode_on" if enabled else "dark_mode_off")
+        )
+        self.apply_styles()
 
     def keyPressEvent(self, event):
         focused = self.focusWidget()
