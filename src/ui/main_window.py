@@ -4,9 +4,9 @@ Ventana principal de la aplicación
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QLabel, QSlider, QTabWidget, QInputDialog, QMessageBox
+    QLabel, QSlider, QTabWidget, QInputDialog, QMessageBox, QCompleter
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QSettings
+from PyQt6.QtCore import Qt, QEvent, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QSettings, QStringListModel
 from typing import List, Dict, Optional
 import os
 import random
@@ -85,6 +85,8 @@ class MainWindow(QMainWindow):
         self.play_queue = PlaybackQueue(self.randomizer)
         self._threads = set()
         self._search_generation = 0
+        self.recent_searches = self.settings.value("recent_searches", [], type=list)
+        self.recent_searches = [str(query) for query in self.recent_searches if str(query).strip()]
         self._play_generation = 0
         self._preloaded_audio = {}
         self._preload_inflight = set()
@@ -121,6 +123,12 @@ class MainWindow(QMainWindow):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Buscar música en YouTube...")
         self.search_input.returnPressed.connect(self.perform_search)
+        self.search_input.installEventFilter(self)
+        self.recent_search_model = QStringListModel(self.recent_searches, self)
+        self.recent_search_completer = QCompleter(self.recent_search_model, self)
+        self.recent_search_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.recent_search_completer.activated.connect(self._select_recent_search)
+        self.search_input.setCompleter(self.recent_search_completer)
 
         self.search_button = QPushButton("Buscar")
         self.search_button.clicked.connect(self.perform_search)
@@ -379,6 +387,20 @@ class MainWindow(QMainWindow):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def eventFilter(self, watched, event):
+        if (watched is self.search_input and event.type() == QEvent.Type.FocusIn
+                and self.recent_searches):
+            QTimer.singleShot(0, self._show_recent_searches)
+        return super().eventFilter(watched, event)
+
+    def _show_recent_searches(self):
+        if self.search_input.hasFocus() and self.recent_searches:
+            self.recent_search_completer.complete()
+
+    def _select_recent_search(self, query: str):
+        self.search_input.setText(query)
+        self.perform_search()
     
     def perform_search(self):
         """Realiza una búsqueda en YouTube"""
@@ -391,6 +413,12 @@ class MainWindow(QMainWindow):
         if any(getattr(thread, "thread_kind", None) == "search" and thread.isRunning()
                for thread in self._threads):
             return
+
+        self.lists_tabs.setCurrentWidget(self.results_list)
+        self.recent_searches = [query] + [item for item in self.recent_searches if item.casefold() != query.casefold()]
+        self.recent_searches = self.recent_searches[:10]
+        self.settings.setValue("recent_searches", self.recent_searches)
+        self.recent_search_model.setStringList(self.recent_searches)
         
         self.status_label.setText(self.text("searching", query=query))
         self.search_button.setEnabled(False)
