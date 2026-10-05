@@ -4,9 +4,9 @@ Ventana principal de la aplicación
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QLabel, QSlider, QTabWidget, QInputDialog, QMessageBox, QCompleter
+    QLabel, QSlider, QTabWidget, QInputDialog, QMessageBox, QMenu
 )
-from PyQt6.QtCore import Qt, QEvent, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QSettings, QStringListModel
+from PyQt6.QtCore import Qt, QEvent, QThread, pyqtSignal, QTimer, QObject, QStandardPaths, QSettings
 from typing import List, Dict, Optional
 import os
 import random
@@ -124,11 +124,8 @@ class MainWindow(QMainWindow):
         self.search_input.setPlaceholderText("Buscar música en YouTube...")
         self.search_input.returnPressed.connect(self.perform_search)
         self.search_input.installEventFilter(self)
-        self.recent_search_model = QStringListModel(self.recent_searches, self)
-        self.recent_search_completer = QCompleter(self.recent_search_model, self)
-        self.recent_search_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.recent_search_completer.activated.connect(self._select_recent_search)
-        self.search_input.setCompleter(self.recent_search_completer)
+        self.search_input.textEdited.connect(self._hide_recent_searches)
+        self.recent_search_menu = QMenu(self)
 
         self.search_button = QPushButton("Buscar")
         self.search_button.clicked.connect(self.perform_search)
@@ -371,6 +368,16 @@ class MainWindow(QMainWindow):
             }
         """
         self.setStyleSheet(stylesheet_for_mode(light_stylesheet, self.theme_preference.enabled))
+        self.recent_search_menu.setStyleSheet(stylesheet_for_mode("""
+            QMenu {
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #7f9db9;
+                padding: 3px;
+            }
+            QMenu::item { padding: 6px 12px; }
+            QMenu::item:selected { background-color: #d6d6d6; color: #000000; }
+        """, self.theme_preference.enabled))
 
     def toggle_dark_mode(self, enabled: bool):
         self.theme_preference.set_enabled(enabled)
@@ -389,16 +396,27 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def eventFilter(self, watched, event):
-        if (watched is self.search_input and event.type() == QEvent.Type.FocusIn
-                and self.recent_searches):
+        if (watched is self.search_input and event.type() == QEvent.Type.MouseButtonPress
+                and not self.search_input.text() and self.recent_searches):
             QTimer.singleShot(0, self._show_recent_searches)
         return super().eventFilter(watched, event)
 
     def _show_recent_searches(self):
-        if self.search_input.hasFocus() and self.recent_searches:
-            self.recent_search_completer.complete()
+        if not self.search_input.hasFocus() or self.search_input.text() or not self.recent_searches:
+            return
+        self.recent_search_menu.clear()
+        for query in self.recent_searches:
+            action = self.recent_search_menu.addAction(query)
+            action.triggered.connect(lambda checked=False, value=query: self._select_recent_search(value))
+        self.recent_search_menu.setMinimumWidth(self.search_input.width())
+        position = self.search_input.mapToGlobal(self.search_input.rect().bottomLeft())
+        self.recent_search_menu.popup(position)
+
+    def _hide_recent_searches(self, _text: str):
+        self.recent_search_menu.hide()
 
     def _select_recent_search(self, query: str):
+        self.recent_search_menu.hide()
         self.search_input.setText(query)
         self.perform_search()
     
@@ -418,7 +436,7 @@ class MainWindow(QMainWindow):
         self.recent_searches = [query] + [item for item in self.recent_searches if item.casefold() != query.casefold()]
         self.recent_searches = self.recent_searches[:10]
         self.settings.setValue("recent_searches", self.recent_searches)
-        self.recent_search_model.setStringList(self.recent_searches)
+        self.recent_search_menu.clear()
         
         self.status_label.setText(self.text("searching", query=query))
         self.search_button.setEnabled(False)
