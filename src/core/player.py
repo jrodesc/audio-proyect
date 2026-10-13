@@ -229,10 +229,6 @@ class PlayerManager:
                 'msg_level': 'all=error',  # Solo mostrar errores
             }
             
-            # En Linux, configuración adicional
-            if sys.platform == 'linux':
-                config['audio_device'] = 'auto'
-            
             # Crear player con configuración de locale
             self.player = mpv.MPV(**config)
             
@@ -286,7 +282,11 @@ class PlayerManager:
             # Limpiarlo antes de cargar la nueva pista garantiza que arranque.
             self.player.pause = False
             self.current_track_token = track_token
-            self.player.play(url)
+            # python-mpv's play() uses a synchronous loadfile command. When the
+            # old stream is still opening/tearing down (common with remote
+            # YouTube URLs), that command can block the Qt UI thread. Queue the
+            # replacement on libmpv's event loop instead.
+            self.player.command_async('loadfile', url, 'replace')
             self.current_url = url
             self.is_playing = True
             print("✅ Reproducción iniciada")
